@@ -19,9 +19,10 @@ class AccessCommand(str, Enum):
     UNLOCK = "unlock"
 
 class AccessAttemptIn(BaseModel):
+    """Request model for simulated device access attempts."""
     device_id: str
-    user_id: str
-    command: AccessCommand
+    user_card_id: str
+    command: AccessCommand = AccessCommand.OPEN  # Default to OPEN if not specified
 
 class AccessEvent(BaseModel):
     timestamp: datetime
