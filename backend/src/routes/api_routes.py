@@ -8,7 +8,7 @@ from controllers.api_controllers import DeviceController, AccessLogController
 from models.access_log import AccessAttemptIn
 
 # Create router
-api_router = APIRouter(prefix="/api", tags=["api"])
+api_router = APIRouter(tags=["api"])
 
 
 @api_router.get("/devices/status")
