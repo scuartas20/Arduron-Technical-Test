@@ -3,41 +3,43 @@ import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
+from config.settings import settings
 from routes.api_routes import api_router
 from websocket.websocket_manager import websocket_manager, handle_websocket_message
 
 app = FastAPI(
-    title="Access Control Manager API",
-    description="A real-time access control system for smart doors",
-    version="1.0.0"
+    title=settings.api_title,
+    description=settings.api_description,
+    version=settings.api_version
 )
 
 # Configure CORS for frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # React frontend
+    allow_origins=settings.allowed_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Include API routes
-app.include_router(api_router)
+app.include_router(api_router, prefix=settings.api_prefix)
 
 @app.get("/")
 async def root():
     return {
-        "message": "Access Control Manager API",
-        "version": "1.0.0",
+        "message": settings.api_title,
+        "version": settings.api_version,
+        "environment": settings.environment,
         "endpoints": {
-            "api": "/api",
-            "websocket": "/ws",
-            "health": "/api/health",
+            "api": settings.api_prefix,
+            "websocket": settings.ws_endpoint,
+            "health": f"{settings.api_prefix}/health",
             "docs": "/docs"
         }
     }
 
-@app.websocket("/ws")
+@app.websocket(settings.ws_endpoint)
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket endpoint for real-time communication."""
     await websocket_manager.connect(websocket)
@@ -54,4 +56,9 @@ async def websocket_endpoint(websocket: WebSocket):
         websocket_manager.disconnect(websocket)
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=5000, reload=True)
+    uvicorn.run(
+        "main:app", 
+        host=settings.host, 
+        port=settings.port, 
+        reload=settings.reload
+    )

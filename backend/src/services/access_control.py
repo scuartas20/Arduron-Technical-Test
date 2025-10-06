@@ -7,6 +7,7 @@ from typing import Tuple, Optional
 from models.devices import Door, PhysicalStatus, LockState
 from models.access_log import AccessEvent, AccessStatus, AccessCommand
 from services.app_state import app_state
+from config.settings import settings
 
 
 class AccessControlService:
@@ -31,7 +32,7 @@ class AccessControlService:
             return AccessStatus.DENIED, f"Device {device_id} not found", None
         
         # Check if user is admin (simplified authentication)
-        is_admin = user_id.lower() == "admin"
+        is_admin = user_id.lower() == settings.admin_user_id.lower()
         
         # Process different commands
         if command == AccessCommand.OPEN:
