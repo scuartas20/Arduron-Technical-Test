@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from services.app_state import app_state
 from services.access_control import AccessControlService
 from models.access_log import AccessAttemptIn
+from websocket.websocket_manager import websocket_manager
 
 
 class DeviceController:
@@ -38,8 +39,8 @@ class AccessLogController:
         }
     
     @staticmethod
-    async def process_access_attempt(request: AccessAttemptIn) -> Dict[str, Any]:
-        """Process an access attempt from a simulated device."""
+    async def handle_access_request(request: AccessAttemptIn) -> Dict[str, Any]:
+        """Handle an access request from a simulated device and broadcast updates."""
         # Process the access attempt
         status, message, updated_door = AccessControlService.process_access_attempt(
             device_id=request.device_id,
@@ -57,6 +58,16 @@ class AccessLogController:
         )
         
         app_state.add_access_log(access_event)
+        
+        # 🔥 CRITICAL: Send WebSocket updates to all connected clients
+        # Broadcast the access event to all clients
+        await websocket_manager.broadcast_access_event(access_event.to_dict())
+        
+        # If device state changed, broadcast device state update
+        if updated_door:
+            await websocket_manager.broadcast_device_state_change(
+                request.device_id, updated_door.to_dict()
+            )
         
         # Prepare response
         response = {

@@ -25,7 +25,6 @@ class AppStateManager:
         
         self.door_registry = DoorRegistry()
         self.access_log_registry = AccessLogRegistry()
-        self._websocket_connections = set()
         self._initialized = True
         
         # Initialize with sample doors
@@ -76,25 +75,11 @@ class AppStateManager:
         """Get access logs for a specific device."""
         return self.access_log_registry.get_logs_by_device(device_id, limit)
     
-    # WebSocket connection management
-    def add_websocket_connection(self, websocket):
-        """Add a WebSocket connection."""
-        self._websocket_connections.add(websocket)
-    
-    def remove_websocket_connection(self, websocket):
-        """Remove a WebSocket connection."""
-        self._websocket_connections.discard(websocket)
-    
-    def get_websocket_connections(self):
-        """Get all active WebSocket connections."""
-        return self._websocket_connections.copy()
-    
     # Utility methods
     def reset_state(self):
         """Reset all state (useful for testing)."""
         self.door_registry = DoorRegistry()
         self.access_log_registry = AccessLogRegistry()
-        self._websocket_connections = set()
         self._initialize_sample_data()
 
 

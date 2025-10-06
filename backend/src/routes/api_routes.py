@@ -8,7 +8,7 @@ from controllers.api_controllers import DeviceController, AccessLogController
 from models.access_log import AccessAttemptIn
 
 # Create router
-api_router = APIRouter(tags=["api"])
+api_router = APIRouter(prefix="/api",tags=["api"])
 
 
 @api_router.get("/devices/status")
@@ -63,7 +63,7 @@ async def create_access_log(request: AccessAttemptIn) -> Dict[str, Any]:
         Dict containing the result of the access attempt
     """
     try:
-        return await AccessLogController.process_access_attempt(request)
+        return await AccessLogController.handle_access_request(request)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 

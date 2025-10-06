@@ -11,6 +11,7 @@ export const useAccessControl = () => {
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [logsInitialized, setLogsInitialized] = useState(false); // Track if logs have been initialized
 
   // Load initial data from API
   const loadInitialData = useCallback(async () => {
@@ -23,10 +24,13 @@ export const useAccessControl = () => {
       console.log('Devices data:', devicesData);
       setDevices(devicesData.devices || []);
 
-      // Load access logs
-      const logsData = await apiService.getAccessLogs(50);
-      console.log('Logs data:', logsData);
-      setAccessLogs(logsData.logs || []);
+      // Load access logs only once on initial load
+      if (!logsInitialized) {
+        const logsData = await apiService.getAccessLogs(50);
+        console.log('Initial logs data:', logsData);
+        setAccessLogs(logsData.logs || []);
+        setLogsInitialized(true);
+      }
 
     } catch (err) {
       console.error('Failed to load initial data:', err);
@@ -34,7 +38,7 @@ export const useAccessControl = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [logsInitialized]);
 
   // Initialize on mount
   useEffect(() => {
@@ -72,8 +76,10 @@ export const useAccessControl = () => {
     };
 
     const handleAccessEvent = (data) => {
-      console.log('New access event:', data);
+      console.log('New access event via WebSocket:', data);
       if (data) {
+        // Add new event to the beginning of the logs
+        // Only keep the 50 most recent logs to prevent memory issues
         setAccessLogs(prevLogs => [data, ...prevLogs.slice(0, 49)]);
       }
     };
@@ -144,9 +150,16 @@ export const useAccessControl = () => {
   }, [loadInitialData]);
 
   // Refresh data
-  const refresh = useCallback(() => {
-    loadInitialData();
-  }, [loadInitialData]);
+  const refresh = useCallback(async () => {
+    try {
+      // Only refresh devices, not logs (logs come from WebSocket)
+      const devicesData = await apiService.getDevicesStatus();
+      setDevices(devicesData.devices || []);
+    } catch (err) {
+      console.error('Failed to refresh data:', err);
+      setError('Failed to refresh device data: ' + err.message);
+    }
+  }, []);
 
   return {
     devices,

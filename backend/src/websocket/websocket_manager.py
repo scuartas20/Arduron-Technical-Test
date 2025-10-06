@@ -22,7 +22,6 @@ class WebSocketManager:
         """Accept a new WebSocket connection."""
         await websocket.accept()
         self.active_connections.append(websocket)
-        app_state.add_websocket_connection(websocket)
         
         # Send initial data to the new connection
         await self.send_initial_data(websocket)
@@ -31,7 +30,6 @@ class WebSocketManager:
         """Remove a WebSocket connection."""
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
-        app_state.remove_websocket_connection(websocket)
     
     async def send_personal_message(self, message: str, websocket: WebSocket):
         """Send a message to a specific WebSocket connection."""
@@ -150,23 +148,18 @@ async def handle_command_message(websocket: WebSocket, data: Dict[str, Any]):
             }))
             return
         
-        # Process the command
-        status, message, updated_door = AccessControlService.process_access_attempt(
+        # Create AccessAttemptIn object to use the existing controller logic
+        from models.access_log import AccessAttemptIn
+        from controllers.api_controllers import AccessLogController
+        
+        request = AccessAttemptIn(
             device_id=device_id,
-            user_id=user_id,
+            user_card_id=user_id,
             command=access_command
         )
         
-        # Create and log the access event
-        access_event = AccessControlService.create_access_event(
-            device_id=device_id,
-            user_id=user_id,
-            command=access_command,
-            status=status,
-            message=message
-        )
-        
-        app_state.add_access_log(access_event)
+        # Use the existing controller method (which already handles WebSocket broadcasts)
+        result = await AccessLogController.handle_access_request(request)
         
         # Send response back to the requesting client
         response = {
@@ -174,22 +167,14 @@ async def handle_command_message(websocket: WebSocket, data: Dict[str, Any]):
             "data": {
                 "device_id": device_id,
                 "command": command,
-                "status": status.value,
-                "message": message,
-                "timestamp": access_event.timestamp.isoformat()
+                "status": result["status"],
+                "message": result["message"],
+                "timestamp": result["timestamp"],
+                "access_granted": result["access_granted"]
             }
         }
         
         await websocket.send_text(json.dumps(response))
-        
-        # If device state changed, broadcast to all clients
-        if updated_door:
-            await websocket_manager.broadcast_device_state_change(
-                device_id, updated_door.to_dict()
-            )
-        
-        # Broadcast the access event to all clients
-        await websocket_manager.broadcast_access_event(access_event.to_dict())
         
     except Exception as e:
         await websocket.send_text(json.dumps({
