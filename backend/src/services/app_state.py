@@ -4,7 +4,7 @@ Application state manager - Single source of truth for all system state.
 from typing import Dict, List, Optional
 from datetime import datetime
 
-from models.devices import Door, DoorRegistry, PhysicalStatus, LockState
+from models.devices import Door, DoorRegistry, PhysicalStatus, LockState, DeviceType
 from models.access_log import AccessEvent, AccessLogRegistry, AccessStatus, AccessCommand
 
 
@@ -36,14 +36,16 @@ class AppStateManager:
             door_id="DOOR-001",
             location="Main Entrance",
             physical_status=PhysicalStatus.CLOSED,
-            lock_state=LockState.LOCKED
+            lock_state=LockState.LOCKED,
+            device_type=DeviceType.PHYSICAL  # Dispositivo físico con ESP32
         )
         
         door2 = Door(
             door_id="DOOR-002", 
             location="Conference Room A",
             physical_status=PhysicalStatus.CLOSED,
-            lock_state=LockState.UNLOCKED
+            lock_state=LockState.UNLOCKED,
+            device_type=DeviceType.VIRTUAL   # Dispositivo virtual
         )
         
         self.door_registry.register_door(door1)

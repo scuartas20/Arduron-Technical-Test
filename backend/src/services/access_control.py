@@ -3,18 +3,21 @@ Access control service - Business logic for processing access attempts.
 """
 from datetime import datetime
 from typing import Tuple, Optional
+import logging
 
-from models.devices import Door, PhysicalStatus, LockState
+from models.devices import Door, PhysicalStatus, LockState, DeviceType
 from models.access_log import AccessEvent, AccessStatus, AccessCommand
 from services.app_state import app_state
 from config.settings import settings
+
+logger = logging.getLogger(__name__)
 
 
 class AccessControlService:
     """Service for processing access control logic."""
     
     @staticmethod
-    def process_access_attempt(device_id: str, user_id: str, command: AccessCommand) -> Tuple[AccessStatus, str, Optional[Door]]:
+    async def process_access_attempt(device_id: str, user_id: str, command: AccessCommand) -> Tuple[AccessStatus, str, Optional[Door]]:
         """
         Process an access attempt and return the result.
         
@@ -36,18 +39,20 @@ class AccessControlService:
         
         # Process different commands
         if command == AccessCommand.OPEN:
-            return AccessControlService._process_open_command(door, is_admin)
+            status, message, updated_door = await AccessControlService._process_open_command(door, is_admin)
         elif command == AccessCommand.CLOSE:
-            return AccessControlService._process_close_command(door, is_admin)
+            status, message, updated_door = await AccessControlService._process_close_command(door, is_admin)
         elif command == AccessCommand.LOCK:
-            return AccessControlService._process_lock_command(door, is_admin)
+            status, message, updated_door = await AccessControlService._process_lock_command(door, is_admin)
         elif command == AccessCommand.UNLOCK:
-            return AccessControlService._process_unlock_command(door, is_admin)
+            status, message, updated_door = await AccessControlService._process_unlock_command(door, is_admin)
         else:
             return AccessStatus.DENIED, f"Unknown command: {command}", None
+        
+        return status, message, updated_door
     
     @staticmethod
-    def _process_open_command(door: Door, is_admin: bool) -> Tuple[AccessStatus, str, Optional[Door]]:
+    async def _process_open_command(door: Door, is_admin: bool) -> Tuple[AccessStatus, str, Optional[Door]]:
         """Process an OPEN command."""
         # Check if door is locked
         if door.lock_state == LockState.LOCKED and not is_admin:
@@ -57,31 +62,51 @@ class AccessControlService:
         if door.physical_status == PhysicalStatus.OPEN:
             return AccessStatus.GRANTED, "Door was already open", door
         
-        # Open the door
-        updated_door = app_state.update_door_state(
-            door.door_id, 
-            physical_status=PhysicalStatus.OPEN
-        )
-        
-        return AccessStatus.GRANTED, "Door opened successfully", updated_door
+        # Comportamiento diferente según tipo de dispositivo
+        if door.device_type == DeviceType.PHYSICAL:
+            # Para dispositivos físicos: solo enviar comando, NO actualizar estado aún
+            command_sent = await AccessControlService._send_command_to_device(door.door_id, "open")
+            
+            if command_sent:
+                # El estado se actualizará cuando el ESP32 responda
+                return AccessStatus.GRANTED, "Open command sent to device", None
+            else:
+                return AccessStatus.DENIED, "Device not connected", None
+        else:
+            # Para dispositivos virtuales: actualizar estado inmediatamente
+            updated_door = app_state.update_door_state(
+                door.door_id, 
+                physical_status=PhysicalStatus.OPEN
+            )
+            return AccessStatus.GRANTED, "Door opened successfully", updated_door
     
     @staticmethod
-    def _process_close_command(door: Door, is_admin: bool) -> Tuple[AccessStatus, str, Optional[Door]]:
+    async def _process_close_command(door: Door, is_admin: bool) -> Tuple[AccessStatus, str, Optional[Door]]:
         """Process a CLOSE command."""
         # Check if door is already closed
         if door.physical_status == PhysicalStatus.CLOSED:
             return AccessStatus.GRANTED, "Door was already closed", door
         
-        # Close the door
-        updated_door = app_state.update_door_state(
-            door.door_id,
-            physical_status=PhysicalStatus.CLOSED
-        )
-        
-        return AccessStatus.GRANTED, "Door closed successfully", updated_door
+        # Comportamiento diferente según tipo de dispositivo
+        if door.device_type == DeviceType.PHYSICAL:
+            # Para dispositivos físicos: solo enviar comando, NO actualizar estado aún
+            command_sent = await AccessControlService._send_command_to_device(door.door_id, "close")
+            
+            if command_sent:
+                # El estado se actualizará cuando el ESP32 responda
+                return AccessStatus.GRANTED, "Close command sent to device", None
+            else:
+                return AccessStatus.DENIED, "Device not connected", None
+        else:
+            # Para dispositivos virtuales: actualizar estado inmediatamente
+            updated_door = app_state.update_door_state(
+                door.door_id,
+                physical_status=PhysicalStatus.CLOSED
+            )
+            return AccessStatus.GRANTED, "Door closed successfully", updated_door
     
     @staticmethod
-    def _process_lock_command(door: Door, is_admin: bool) -> Tuple[AccessStatus, str, Optional[Door]]:
+    async def _process_lock_command(door: Door, is_admin: bool) -> Tuple[AccessStatus, str, Optional[Door]]:
         """Process a LOCK command."""
         # Only admins can lock doors
         if not is_admin:
@@ -100,7 +125,7 @@ class AccessControlService:
         return AccessStatus.GRANTED, "Door locked successfully", updated_door
     
     @staticmethod
-    def _process_unlock_command(door: Door, is_admin: bool) -> Tuple[AccessStatus, str, Optional[Door]]:
+    async def _process_unlock_command(door: Door, is_admin: bool) -> Tuple[AccessStatus, str, Optional[Door]]:
         """Process an UNLOCK command."""
         # Only admins can unlock doors
         if not is_admin:
@@ -117,6 +142,75 @@ class AccessControlService:
         )
         
         return AccessStatus.GRANTED, "Door unlocked successfully", updated_door
+    
+    @staticmethod
+    async def _send_command_to_device(device_id: str, command: str) -> bool:
+        """Enviar comando a dispositivo físico a través de WebSocket."""
+        from websocket.websocket_manager import websocket_manager
+        
+        try:
+            success = await websocket_manager.send_command_to_device(device_id, command)
+            if success:
+                logger.info(f"Comando '{command}' enviado a dispositivo {device_id}")
+                return True
+            else:
+                logger.warning(f"No se pudo enviar comando '{command}' a dispositivo {device_id} - dispositivo no conectado")
+                return False
+        except Exception as e:
+            logger.error(f"Error enviando comando a dispositivo {device_id}: {str(e)}")
+            return False
+    
+    @staticmethod
+    async def handle_device_status_update(device_id: str, status_data: dict):
+        """Procesar actualización de estado desde un dispositivo físico."""
+        try:
+            # Obtener la puerta
+            door = app_state.get_door(device_id)
+            if not door:
+                logger.warning(f"Status update received for unknown device: {device_id}")
+                return
+            
+            # Verificar que sea un dispositivo físico
+            if door.device_type != DeviceType.PHYSICAL:
+                logger.warning(f"Status update received for non-physical device: {device_id}")
+                return
+            
+            # Extraer el nuevo estado físico
+            new_physical_status = status_data.get("physical_status")
+            if new_physical_status and new_physical_status in ["open", "closed"]:
+                # Convertir a enum
+                physical_status = PhysicalStatus.OPEN if new_physical_status == "open" else PhysicalStatus.CLOSED
+                
+                # Actualizar el estado en el sistema
+                updated_door = app_state.update_door_state(
+                    device_id,
+                    physical_status=physical_status
+                )
+                
+                if updated_door:
+                    logger.info(f"Status updated for {device_id}: {new_physical_status}")
+                    
+                    # Crear evento de log para el cambio manual
+                    access_event = AccessControlService.create_access_event(
+                        device_id=device_id,
+                        user_id="device",  # Indica que fue el dispositivo físico
+                        command=AccessCommand.OPEN if physical_status == PhysicalStatus.OPEN else AccessCommand.CLOSE,
+                        status=AccessStatus.GRANTED,
+                        message=f"Door {new_physical_status} physically"
+                    )
+                    
+                    # Agregar al log
+                    app_state.add_access_log(access_event)
+                    
+                    # Notificar a todos los clientes conectados
+                    from websocket.websocket_manager import websocket_manager
+                    await websocket_manager.broadcast_device_state_change(
+                        device_id, updated_door.to_dict()
+                    )
+                    await websocket_manager.broadcast_access_event(access_event.to_dict())
+                    
+        except Exception as e:
+            logger.error(f"Error procesando actualización de estado para {device_id}: {str(e)}")
     
     @staticmethod
     def create_access_event(device_id: str, user_id: str, command: AccessCommand, 

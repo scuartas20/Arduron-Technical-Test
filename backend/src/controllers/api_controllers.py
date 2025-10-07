@@ -42,7 +42,7 @@ class AccessLogController:
     async def handle_access_request(request: AccessAttemptIn) -> Dict[str, Any]:
         """Handle an access request from a simulated device and broadcast updates."""
         # Process the access attempt
-        status, message, updated_door = AccessControlService.process_access_attempt(
+        status, message, updated_door = await AccessControlService.process_access_attempt(
             device_id=request.device_id,
             user_id=request.user_card_id,
             command=request.command

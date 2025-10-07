@@ -17,6 +17,8 @@ class WebSocketManager:
     
     def __init__(self):
         self.active_connections: list[WebSocket] = []
+        # Device connections (ESP32, etc.)
+        self.device_connections: Dict[str, WebSocket] = {}
     
     async def connect(self, websocket: WebSocket):
         """Accept a new WebSocket connection."""
@@ -30,6 +32,47 @@ class WebSocketManager:
         """Remove a WebSocket connection."""
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
+    
+    async def connect_device(self, websocket: WebSocket, device_id: str):
+        """Accept a connection from a device like ESP32."""
+        await websocket.accept()
+        
+        # If device was already connected, replace the old connection
+        if device_id in self.device_connections:
+            print(f"Device {device_id} reconnected, replacing old connection")
+        
+        # Store the new connection
+        self.device_connections[device_id] = websocket
+        print(f"Device {device_id} connected via WebSocket")
+    
+    def disconnect_device(self, websocket: WebSocket, device_id: str):
+        """Remove a device WebSocket connection."""
+        if device_id in self.device_connections and self.device_connections[device_id] == websocket:
+            del self.device_connections[device_id]
+            print(f"Device {device_id} disconnected")
+    
+    async def send_command_to_device(self, device_id: str, command: str) -> bool:
+        """Send a command to a specific device (ESP32)."""
+        if device_id not in self.device_connections:
+            print(f"Cannot send command to device {device_id}: Device not connected")
+            return False
+        
+        device_ws = self.device_connections[device_id]
+        command_message = {
+            "type": "command",
+            "command": command.lower(),
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        try:
+            await device_ws.send_text(json.dumps(command_message))
+            print(f"Command '{command}' sent to device {device_id}")
+            return True
+        except Exception as e:
+            print(f"Failed to send command to device {device_id}: {e}")
+            # Remove disconnected device
+            self.disconnect_device(device_ws, device_id)
+            return False
     
     async def send_personal_message(self, message: str, websocket: WebSocket):
         """Send a message to a specific WebSocket connection."""

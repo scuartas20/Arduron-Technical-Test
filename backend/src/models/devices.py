@@ -16,18 +16,25 @@ class LockState(str, Enum):
     UNLOCKED = "unlocked"
 
 
+class DeviceType(str, Enum):
+    PHYSICAL = "physical"  # Tiene hardware real (ESP32)
+    VIRTUAL = "virtual"    # Solo existe en software
+
+
 class Door(BaseModel):
     door_id: str
     location: str
     physical_status: PhysicalStatus = PhysicalStatus.CLOSED
     lock_state: LockState = LockState.LOCKED
+    device_type: DeviceType = DeviceType.VIRTUAL
 
     def to_dict(self) -> Dict:
         return {
             "door_id": self.door_id,
             "location": self.location,
             "physical_status": self.physical_status,
-            "lock_state": self.lock_state
+            "lock_state": self.lock_state,
+            "device_type": self.device_type
         }
 
 
