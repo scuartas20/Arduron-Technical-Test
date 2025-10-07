@@ -5,11 +5,10 @@ import json
 import asyncio
 import logging
 from typing import Dict, Any
-from fastapi import WebSocket, WebSocketDisconnect
+from fastapi import WebSocket
 from datetime import datetime
 
 from services.app_state import app_state
-from services.access_control import AccessControlService
 from models.access_log import AccessCommand
 
 logger = logging.getLogger(__name__)

@@ -180,24 +180,12 @@ class AccessControlService:
                 if updated_door:
                     logger.info(f"Status updated for {device_id}: {new_physical_status}")
                     
-                    # Crear evento de log para el cambio manual
-                    access_event = AccessControlService.create_access_event(
-                        device_id=device_id,
-                        user_id="device",  # Indica que fue el dispositivo físico
-                        command=AccessCommand.OPEN if physical_status == PhysicalStatus.OPEN else AccessCommand.CLOSE,
-                        status=AccessStatus.GRANTED,
-                        message=f"Door {new_physical_status} physically"
-                    )
-                    
-                    # Agregar al log
-                    app_state.add_access_log(access_event)
-                    
-                    # Notificar a todos los clientes conectados
+                    # Notificar a todos los clientes conectados sobre el cambio de estado del dispositivo
+                    # No se registra en el access log ya que el estado físico se muestra en el frontend
                     from websocket.websocket_manager import websocket_manager
                     await websocket_manager.broadcast_device_state_change(
                         device_id, updated_door.to_dict()
                     )
-                    await websocket_manager.broadcast_access_event(access_event.to_dict())
                     
         except Exception as e:
             logger.error(f"Error procesando actualización de estado para {device_id}: {str(e)}")
