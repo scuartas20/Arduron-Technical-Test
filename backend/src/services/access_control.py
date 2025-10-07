@@ -4,6 +4,7 @@ Access control service - Business logic for processing access attempts.
 from datetime import datetime
 from typing import Tuple, Optional
 import logging
+import json
 
 from models.devices import Door, PhysicalStatus, LockState, DeviceType
 from models.access_log import AccessEvent, AccessStatus, AccessCommand
@@ -211,6 +212,112 @@ class AccessControlService:
                     
         except Exception as e:
             logger.error(f"Error procesando actualización de estado para {device_id}: {str(e)}")
+    
+    @staticmethod
+    async def handle_button_command_request(device_id: str, command: str, device_websocket):
+        """Manejar solicitud de comando desde botón físico del ESP32."""
+        try:
+            # Obtener la puerta
+            door = app_state.get_door(device_id)
+            if not door:
+                logger.warning(f"Button command request from unknown device: {device_id}")
+                await AccessControlService._send_command_denied(
+                    device_websocket, command, "Device not found"
+                )
+                return
+            
+            # Verificar que sea un dispositivo físico
+            if door.device_type != DeviceType.PHYSICAL:
+                logger.warning(f"Button command request from non-physical device: {device_id}")
+                await AccessControlService._send_command_denied(
+                    device_websocket, command, "Device is not physical"
+                )
+                return
+            
+            # Convertir comando a enum
+            try:
+                access_command = AccessCommand(command.lower())
+            except ValueError:
+                logger.error(f"Invalid command from button: {command}")
+                await AccessControlService._send_command_denied(
+                    device_websocket, command, "Invalid command"
+                )
+                return
+            
+            # Verificar si la puerta está bloqueada
+            if door.lock_state == LockState.LOCKED:
+                logger.info(f"Button command '{command}' denied for {device_id}: Door is locked")
+                await AccessControlService._send_command_denied(
+                    device_websocket, command, "Door is locked"
+                )
+                
+                # Crear evento de log para el intento denegado
+                access_event = AccessControlService.create_access_event(
+                    device_id=device_id,
+                    user_id="physical_button",
+                    command=access_command,
+                    status=AccessStatus.DENIED,
+                    message="Button command denied - Door is locked"
+                )
+                
+                app_state.add_access_log(access_event)
+                
+                # Notificar a clientes conectados sobre el intento denegado
+                from websocket.websocket_manager import websocket_manager
+                await websocket_manager.broadcast_access_event(access_event.to_dict())
+                return
+            
+            # Si la puerta no está bloqueada, procesar el comando normalmente
+            status, message, updated_door = await AccessControlService.process_access_attempt(
+                device_id=device_id,
+                user_id="physical_button",
+                command=access_command
+            )
+            
+            # Crear evento de log
+            access_event = AccessControlService.create_access_event(
+                device_id=device_id,
+                user_id="physical_button",
+                command=access_command,
+                status=status,
+                message=message
+            )
+            
+            app_state.add_access_log(access_event)
+            
+            # Notificar a todos los clientes conectados
+            from websocket.websocket_manager import websocket_manager
+            await websocket_manager.broadcast_access_event(access_event.to_dict())
+            
+            if updated_door:
+                await websocket_manager.broadcast_device_state_change(
+                    device_id, updated_door.to_dict()
+                )
+            
+            logger.info(f"Button command '{command}' processed for {device_id}: {status.value} - {message}")
+            
+        except Exception as e:
+            logger.error(f"Error processing button command request from {device_id}: {str(e)}")
+            await AccessControlService._send_command_denied(
+                device_websocket, command, f"Internal error: {str(e)}"
+            )
+    
+    @staticmethod
+    async def _send_command_denied(websocket, command: str, reason: str):
+        """Enviar mensaje de comando denegado al dispositivo."""
+        try:
+            denial_message = {
+                "type": "command_denied",
+                "command": command,
+                "reason": reason,
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            await websocket.send_text(json.dumps(denial_message))
+            logger.info(f"Command denial sent: {command} - {reason}")
+            
+        except Exception as e:
+            logger.error(f"Error sending command denial: {str(e)}")
     
     @staticmethod
     def create_access_event(device_id: str, user_id: str, command: AccessCommand, 

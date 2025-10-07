@@ -97,14 +97,11 @@ void handleSwitchInput() {
       
       // Switch pressed (LOW to HIGH transition)
       if (currentSwitchState == HIGH) {
-        Serial.println("🔘 Switch pressed - Changing door state");
+        Serial.println("🔘 Switch pressed - Requesting door state change");
         
-        // Toggle door state
-        bool newState = !doorOpen;
-        setDoorState(newState);
-        
-        // Send status update to backend
-        sendStatusUpdate();
+        // Instead of changing state directly, send a command request to backend
+        String command = doorOpen ? "close" : "open";
+        sendCommandRequest(command);
       }
     }
   }
@@ -127,6 +124,24 @@ void sendStatusUpdate() {
     Serial.println("📤 Status sent to backend: " + message);
   } else {
     Serial.println("⚠️ WebSocket not connected - Could not send status");
+  }
+}
+
+void sendCommandRequest(String command) {
+  if (webSocket.isConnected()) {
+    // Create JSON message for command request from physical button
+    DynamicJsonDocument doc(1024);
+    doc["type"] = "button_command_request";
+    doc["command"] = command;
+    doc["timestamp"] = getTimestamp();
+    
+    String message;
+    serializeJson(doc, message);
+    
+    webSocket.sendTXT(message);
+    Serial.println("📤 Button command request sent to backend: " + message);
+  } else {
+    Serial.println("⚠️ WebSocket not connected - Could not send command request");
   }
 }
 
@@ -214,6 +229,12 @@ void handleWebSocketMessage(String message) {
     else {
       sendCommandResponse(command, false, "Unknown command");
     }
+  }
+  else if (type == "command_denied") {
+    String command = doc["command"];
+    String reason = doc["reason"];
+    Serial.println("❌ Command DENIED: " + command + " - Reason: " + reason);
+    // Don't change state, just log the denial
   }
   else if (type == "handshake") {
     Serial.println("🤝 Handshake received from server");

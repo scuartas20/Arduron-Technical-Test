@@ -92,6 +92,13 @@ async def device_websocket_endpoint(
                         "message": "Status update received"
                     }))
                     
+                elif message_type == "button_command_request":
+                    # Handle button press requests from ESP32
+                    from services.access_control import AccessControlService
+                    await AccessControlService.handle_button_command_request(
+                        device_id, message.get("command"), websocket
+                    )
+                    
                 elif message_type == "command_response":
                     # Handle response to commands sent from server
                     logger.info(f"Device {device_id} responded: {message}")
