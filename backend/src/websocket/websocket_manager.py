@@ -3,6 +3,7 @@ WebSocket server for real-time communication.
 """
 import json
 import asyncio
+import logging
 from typing import Dict, Any
 from fastapi import WebSocket, WebSocketDisconnect
 from datetime import datetime
@@ -11,9 +12,19 @@ from services.app_state import app_state
 from services.access_control import AccessControlService
 from models.access_log import AccessCommand
 
+logger = logging.getLogger(__name__)
+
 
 class WebSocketManager:
-    """Manages WebSocket connections and message broadcasting."""
+    """
+    Manages WebSocket connections and message broadcasting.
+    
+    This class encapsulates all WebSocket-related functionality including:
+    - Connection management for both frontend clients and physical devices
+    - Message handling and routing
+    - Broadcasting updates to connected clients
+    - Command processing and validation
+    """
     
     def __init__(self):
         self.active_connections: list[WebSocket] = []
@@ -39,22 +50,22 @@ class WebSocketManager:
         
         # If device was already connected, replace the old connection
         if device_id in self.device_connections:
-            print(f"Device {device_id} reconnected, replacing old connection")
+            logger.info(f"Device {device_id} reconnected, replacing old connection")
         
         # Store the new connection
         self.device_connections[device_id] = websocket
-        print(f"Device {device_id} connected via WebSocket")
+        logger.info(f"Device {device_id} connected via WebSocket")
     
     def disconnect_device(self, websocket: WebSocket, device_id: str):
         """Remove a device WebSocket connection."""
         if device_id in self.device_connections and self.device_connections[device_id] == websocket:
             del self.device_connections[device_id]
-            print(f"Device {device_id} disconnected")
+            logger.info(f"Device {device_id} disconnected")
     
     async def send_command_to_device(self, device_id: str, command: str) -> bool:
         """Send a command to a specific device (ESP32)."""
         if device_id not in self.device_connections:
-            print(f"Cannot send command to device {device_id}: Device not connected")
+            logger.warning(f"Cannot send command '{command}' to device {device_id}: Device not connected")
             return False
         
         device_ws = self.device_connections[device_id]
@@ -66,10 +77,10 @@ class WebSocketManager:
         
         try:
             await device_ws.send_text(json.dumps(command_message))
-            print(f"Command '{command}' sent to device {device_id}")
+            logger.info(f"Command '{command}' sent successfully to device {device_id}")
             return True
         except Exception as e:
-            print(f"Failed to send command to device {device_id}: {e}")
+            logger.error(f"Failed to send command '{command}' to device {device_id}: {e}")
             # Remove disconnected device
             self.disconnect_device(device_ws, device_id)
             return False
@@ -133,94 +144,92 @@ class WebSocketManager:
             "data": access_event
         }
         await self.broadcast(message)
+    
+    async def handle_websocket_message(self, websocket: WebSocket, message: str):
+        """Handle incoming WebSocket messages (commands from frontend)."""
+        try:
+            data = json.loads(message)
+            message_type = data.get("type")
+            
+            if message_type == "command":
+                await self.handle_command_message(websocket, data)
+            elif message_type == "ping":
+                await websocket.send_text(json.dumps({"type": "pong", "timestamp": datetime.now().isoformat()}))
+            else:
+                await websocket.send_text(json.dumps({
+                    "type": "error",
+                    "message": f"Unknown message type: {message_type}"
+                }))
+                
+        except json.JSONDecodeError:
+            await websocket.send_text(json.dumps({
+                "type": "error",
+                "message": "Invalid JSON format"
+            }))
+        except Exception as e:
+            await websocket.send_text(json.dumps({
+                "type": "error",
+                "message": f"Error processing message: {str(e)}"
+            }))
+
+    async def handle_command_message(self, websocket: WebSocket, data: Dict[str, Any]):
+        """Handle command messages from the frontend."""
+        try:
+            device_id = data.get("device_id")
+            command = data.get("command")
+            user_id = data.get("user_id", "admin")  # Default to admin for frontend commands
+            
+            if not device_id or not command:
+                await websocket.send_text(json.dumps({
+                    "type": "error",
+                    "message": "Missing device_id or command"
+                }))
+                return
+            
+            # Convert command string to AccessCommand enum
+            try:
+                access_command = AccessCommand(command.lower())
+            except ValueError:
+                await websocket.send_text(json.dumps({
+                    "type": "error",
+                    "message": f"Invalid command: {command}"
+                }))
+                return
+            
+            # Create AccessAttemptIn object to use the existing controller logic
+            from models.access_log import AccessAttemptIn
+            from controllers.api_controllers import AccessLogController
+            
+            request = AccessAttemptIn(
+                device_id=device_id,
+                user_card_id=user_id,
+                command=access_command
+            )
+            
+            # Use the existing controller method (which already handles WebSocket broadcasts)
+            result = await AccessLogController.handle_access_request(request)
+            
+            # Send response back to the requesting client
+            response = {
+                "type": "command_response",
+                "data": {
+                    "device_id": device_id,
+                    "command": command,
+                    "status": result["status"],
+                    "message": result["message"],
+                    "timestamp": result["timestamp"],
+                    "access_granted": result["access_granted"]
+                }
+            }
+            
+            await websocket.send_text(json.dumps(response))
+            
+        except Exception as e:
+            await websocket.send_text(json.dumps({
+                "type": "error",
+                "message": f"Error processing command: {str(e)}"
+            }))
 
 
 # Global WebSocket manager instance
 websocket_manager = WebSocketManager()
-
-
-async def handle_websocket_message(websocket: WebSocket, message: str):
-    """Handle incoming WebSocket messages (commands from frontend)."""
-    try:
-        data = json.loads(message)
-        message_type = data.get("type")
-        
-        if message_type == "command":
-            await handle_command_message(websocket, data)
-        elif message_type == "ping":
-            await websocket.send_text(json.dumps({"type": "pong", "timestamp": datetime.now().isoformat()}))
-        else:
-            await websocket.send_text(json.dumps({
-                "type": "error",
-                "message": f"Unknown message type: {message_type}"
-            }))
-            
-    except json.JSONDecodeError:
-        await websocket.send_text(json.dumps({
-            "type": "error",
-            "message": "Invalid JSON format"
-        }))
-    except Exception as e:
-        await websocket.send_text(json.dumps({
-            "type": "error",
-            "message": f"Error processing message: {str(e)}"
-        }))
-
-
-async def handle_command_message(websocket: WebSocket, data: Dict[str, Any]):
-    """Handle command messages from the frontend."""
-    try:
-        device_id = data.get("device_id")
-        command = data.get("command")
-        user_id = data.get("user_id", "admin")  # Default to admin for frontend commands
-        
-        if not device_id or not command:
-            await websocket.send_text(json.dumps({
-                "type": "error",
-                "message": "Missing device_id or command"
-            }))
-            return
-        
-        # Convert command string to AccessCommand enum
-        try:
-            access_command = AccessCommand(command.lower())
-        except ValueError:
-            await websocket.send_text(json.dumps({
-                "type": "error",
-                "message": f"Invalid command: {command}"
-            }))
-            return
-        
-        # Create AccessAttemptIn object to use the existing controller logic
-        from models.access_log import AccessAttemptIn
-        from controllers.api_controllers import AccessLogController
-        
-        request = AccessAttemptIn(
-            device_id=device_id,
-            user_card_id=user_id,
-            command=access_command
-        )
-        
-        # Use the existing controller method (which already handles WebSocket broadcasts)
-        result = await AccessLogController.handle_access_request(request)
-        
-        # Send response back to the requesting client
-        response = {
-            "type": "command_response",
-            "data": {
-                "device_id": device_id,
-                "command": command,
-                "status": result["status"],
-                "message": result["message"],
-                "timestamp": result["timestamp"],
-                "access_granted": result["access_granted"]
-            }
-        }
-        
-        await websocket.send_text(json.dumps(response))
-        
-    except Exception as e:
-        await websocket.send_text(json.dumps({
-            "type": "error",
-            "message": f"Error processing command: {str(e)}"
-        }))

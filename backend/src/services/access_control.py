@@ -66,12 +66,15 @@ class AccessControlService:
         # Comportamiento diferente según tipo de dispositivo
         if door.device_type == DeviceType.PHYSICAL:
             # Para dispositivos físicos: solo enviar comando, NO actualizar estado aún
-            command_sent = await AccessControlService._send_command_to_device(door.door_id, "open")
+            from websocket.websocket_manager import websocket_manager
+            command_sent = await websocket_manager.send_command_to_device(door.door_id, "open")
             
             if command_sent:
+                logger.info(f"Open command sent to physical device {door.door_id}")
                 # El estado se actualizará cuando el ESP32 responda
                 return AccessStatus.GRANTED, "Open command sent to device", None
             else:
+                logger.warning(f"Failed to send open command to device {door.door_id} - device not connected")
                 return AccessStatus.DENIED, "Device not connected", None
         else:
             # Para dispositivos virtuales: actualizar estado inmediatamente
@@ -91,12 +94,15 @@ class AccessControlService:
         # Comportamiento diferente según tipo de dispositivo
         if door.device_type == DeviceType.PHYSICAL:
             # Para dispositivos físicos: solo enviar comando, NO actualizar estado aún
-            command_sent = await AccessControlService._send_command_to_device(door.door_id, "close")
+            from websocket.websocket_manager import websocket_manager
+            command_sent = await websocket_manager.send_command_to_device(door.door_id, "close")
             
             if command_sent:
+                logger.info(f"Close command sent to physical device {door.door_id}")
                 # El estado se actualizará cuando el ESP32 responda
                 return AccessStatus.GRANTED, "Close command sent to device", None
             else:
+                logger.warning(f"Failed to send close command to device {door.door_id} - device not connected")
                 return AccessStatus.DENIED, "Device not connected", None
         else:
             # Para dispositivos virtuales: actualizar estado inmediatamente
@@ -143,23 +149,6 @@ class AccessControlService:
         )
         
         return AccessStatus.GRANTED, "Door unlocked successfully", updated_door
-    
-    @staticmethod
-    async def _send_command_to_device(device_id: str, command: str) -> bool:
-        """Enviar comando a dispositivo físico a través de WebSocket."""
-        from websocket.websocket_manager import websocket_manager
-        
-        try:
-            success = await websocket_manager.send_command_to_device(device_id, command)
-            if success:
-                logger.info(f"Comando '{command}' enviado a dispositivo {device_id}")
-                return True
-            else:
-                logger.warning(f"No se pudo enviar comando '{command}' a dispositivo {device_id} - dispositivo no conectado")
-                return False
-        except Exception as e:
-            logger.error(f"Error enviando comando a dispositivo {device_id}: {str(e)}")
-            return False
     
     @staticmethod
     async def handle_device_status_update(device_id: str, status_data: dict):

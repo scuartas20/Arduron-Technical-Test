@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config.settings import settings
 from routes.api_routes import api_router
-from websocket.websocket_manager import websocket_manager, handle_websocket_message
+from websocket.websocket_manager import websocket_manager
 
 logger = logging.getLogger(__name__)
 
@@ -53,11 +53,11 @@ async def websocket_endpoint(websocket: WebSocket):
             # Receive message from client
             data = await websocket.receive_text()
             # Handle the message
-            await handle_websocket_message(websocket, data)
+            await websocket_manager.handle_websocket_message(websocket, data)
     except WebSocketDisconnect:
         websocket_manager.disconnect(websocket)
     except Exception as e:
-        print(f"WebSocket error: {e}")
+        logger.error(f"WebSocket error: {e}")
         websocket_manager.disconnect(websocket)
 
 @app.websocket("/ws/{device_id}")
