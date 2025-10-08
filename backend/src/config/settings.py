@@ -33,6 +33,12 @@ class Settings(BaseSettings):
     admin_user_id: str = "admin"
     default_user_timeout: int = 300
     
+    # Rate Limiting Configuration
+    rate_limit_max_attempts_per_minute: int = 20
+    rate_limit_max_failed_attempts: int = 5
+    rate_limit_lockout_duration_minutes: int = 1
+    rate_limit_cleanup_interval_minutes: int = 60
+    
     # Device Configuration
     default_device_count: int = 2
     device_state_broadcast: bool = True

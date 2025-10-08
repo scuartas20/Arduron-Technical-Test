@@ -7,6 +7,7 @@ from fastapi import HTTPException
 
 from services.app_state import app_state
 from services.access_control import AccessControlService
+from services.rate_limiter import rate_limiter
 from models.access_log import AccessAttemptIn
 from websocket.websocket_manager import websocket_manager
 
@@ -85,3 +86,37 @@ class AccessLogController:
             response["updated_device_state"] = updated_door.to_dict()
         
         return response
+
+
+class RateLimiterController:
+    """Controller for rate limiter monitoring and management."""
+    
+    @staticmethod
+    def get_rate_limiter_stats() -> Dict[str, Any]:
+        """Get rate limiter statistics."""
+        stats = rate_limiter.get_stats()
+        return {
+            "rate_limiter_stats": stats,
+            "timestamp": datetime.now().isoformat()
+        }
+    
+    @staticmethod
+    def get_user_rate_limit_status(device_id: str, user_id: str) -> Dict[str, Any]:
+        """Get rate limit status for a specific user/device combination."""
+        status = rate_limiter.get_user_status(device_id, user_id)
+        return {
+            "user_status": status,
+            "timestamp": datetime.now().isoformat()
+        }
+    
+    @staticmethod
+    def clear_rate_limiter() -> Dict[str, Any]:
+        """Clear all rate limiter data (admin function)."""
+        original_count = len(rate_limiter.attempts)
+        rate_limiter.attempts.clear()
+        
+        return {
+            "message": "Rate limiter data cleared",
+            "cleared_attempts": original_count,
+            "timestamp": datetime.now().isoformat()
+        }

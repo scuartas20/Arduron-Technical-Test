@@ -9,6 +9,7 @@ import json
 from models.devices import Door, PhysicalStatus, LockState, DeviceType
 from models.access_log import AccessEvent, AccessStatus, AccessCommand
 from services.app_state import app_state
+from services.rate_limiter import rate_limiter
 from config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -30,9 +31,18 @@ class AccessControlService:
         Returns:
             Tuple of (access_status, message, updated_door)
         """
+        # Check rate limiting first (before any other processing)
+        is_allowed, rate_limit_message = rate_limiter.check_rate_limit(device_id, user_id, command.value)
+        if not is_allowed:
+            # Record the blocked attempt
+            rate_limiter.record_attempt(device_id, user_id, command.value, False)
+            return AccessStatus.DENIED, f"Rate Limited: {rate_limit_message}", None
+        
         # Get the door
         door = app_state.get_door(device_id)
         if not door:
+            # Record failed attempt (device not found)
+            rate_limiter.record_attempt(device_id, user_id, command.value, False)
             return AccessStatus.DENIED, f"Device {device_id} not found", None
         
         # Check if user is admin (simplified authentication)
@@ -48,7 +58,15 @@ class AccessControlService:
         elif command == AccessCommand.UNLOCK:
             status, message, updated_door = await AccessControlService._process_unlock_command(door, is_admin)
         else:
+            # Record failed attempt (unknown command)
+            rate_limiter.record_attempt(device_id, user_id, command.value, False)
             return AccessStatus.DENIED, f"Unknown command: {command}", None
+        
+        # Record the attempt in the rate limiter
+        success = status == AccessStatus.GRANTED
+        rate_limiter.record_attempt(device_id, user_id, command.value, success)
+        
+        return status, message, updated_door
         
         return status, message, updated_door
     
@@ -221,12 +239,42 @@ class AccessControlService:
                 )
                 return
             
+            # Check rate limiting for physical button (prevent button spam)
+            is_allowed, rate_limit_message = rate_limiter.check_rate_limit(device_id, "physical_button", command)
+            if not is_allowed:
+                logger.info(f"Button command '{command}' rate limited for {device_id}: {rate_limit_message}")
+                await AccessControlService._send_command_denied(
+                    device_websocket, command, f"Rate Limited: {rate_limit_message}"
+                )
+                
+                # Record the blocked attempt
+                rate_limiter.record_attempt(device_id, "physical_button", command, False)
+                
+                # Create event log for the rate limited attempt
+                access_event = AccessControlService.create_access_event(
+                    device_id=device_id,
+                    user_id="physical_button",
+                    command=access_command,
+                    status=AccessStatus.DENIED,
+                    message=f"Button command rate limited - {rate_limit_message}"
+                )
+                
+                app_state.add_access_log(access_event)
+                
+                # Notify connected clients about the rate limited attempt
+                from websocket.websocket_manager import websocket_manager
+                await websocket_manager.broadcast_access_event(access_event.to_dict())
+                return
+            
             # Verificar si la puerta está bloqueada
             if door.lock_state == LockState.LOCKED:
                 logger.info(f"Button command '{command}' denied for {device_id}: Door is locked")
                 await AccessControlService._send_command_denied(
                     device_websocket, command, "Door is locked"
                 )
+                
+                # Record the blocked attempt (door locked)
+                rate_limiter.record_attempt(device_id, "physical_button", command, False)
                 
                 # Crear evento de log para el intento denegado
                 access_event = AccessControlService.create_access_event(
