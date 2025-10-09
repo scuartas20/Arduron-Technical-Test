@@ -4,7 +4,7 @@ Application state manager - Single source of truth for all system state.
 from typing import Dict, List, Optional
 from datetime import datetime
 
-from models.devices import Door, DoorRegistry, PhysicalStatus, LockState, DeviceType
+from models.devices import Door, DoorRegistry, PhysicalStatus, LockState, DeviceType, ConnectionStatus
 from models.access_log import AccessEvent, AccessLogRegistry, AccessStatus, AccessCommand
 
 
@@ -31,21 +31,27 @@ class AppStateManager:
         self._initialize_sample_data()
     
     def _initialize_sample_data(self):
-        """Initialize the system with sample doors."""
+        """Initialize the system with doors from configuration."""
+        from config.settings import settings
+        
+        # Create Door 1 from settings
         door1 = Door(
-            door_id="DOOR-001",
-            location="Main Entrance",
-            physical_status=PhysicalStatus.CLOSED,
-            lock_state=LockState.LOCKED,
-            device_type=DeviceType.PHYSICAL  # Dispositivo físico con ESP32
+            door_id=settings.door1_id,
+            location=settings.door1_location,
+            physical_status=PhysicalStatus(settings.door1_initial_physical_status),
+            lock_state=LockState(settings.door1_initial_lock_state),
+            device_type=DeviceType(settings.door1_type),
+            connection_status=ConnectionStatus.ONLINE if settings.door1_type == "virtual" else ConnectionStatus.OFFLINE
         )
         
+        # Create Door 2 from settings
         door2 = Door(
-            door_id="DOOR-002", 
-            location="Conference Room A",
-            physical_status=PhysicalStatus.CLOSED,
-            lock_state=LockState.UNLOCKED,
-            device_type=DeviceType.VIRTUAL   # Dispositivo virtual
+            door_id=settings.door2_id,
+            location=settings.door2_location,
+            physical_status=PhysicalStatus(settings.door2_initial_physical_status),
+            lock_state=LockState(settings.door2_initial_lock_state),
+            device_type=DeviceType(settings.door2_type),
+            connection_status=ConnectionStatus.ONLINE if settings.door2_type == "virtual" else ConnectionStatus.OFFLINE
         )
         
         self.door_registry.register_door(door1)

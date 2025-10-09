@@ -3,9 +3,11 @@ API routes for the Access Control Manager.
 """
 from fastapi import APIRouter, HTTPException, Query
 from typing import Dict, Any
+from datetime import datetime
 
 from controllers.api_controllers import DeviceController, AccessLogController, RateLimiterController
 from models.access_log import AccessAttemptIn
+from websocket.websocket_manager import websocket_manager
 
 # Create router
 api_router = APIRouter(tags=["api"])
@@ -111,17 +113,76 @@ async def get_user_rate_limit_status(
 
 
 @api_router.delete("/security/rate_limiter/clear")
-async def clear_rate_limiter() -> Dict[str, Any]:
+async def clear_rate_limiter(
+    user_id: str = Query(..., description="User ID requesting the operation")
+) -> Dict[str, Any]:
     """
     Clear all rate limiter data (admin function).
     
     This endpoint clears all stored rate limiting attempts.
-    Use with caution as it removes all rate limiting history.
+    Only admin users are authorized to perform this operation.
     
+    Args:
+        user_id: ID of the user requesting the operation (must be 'admin')
+        
     Returns:
         Dict containing confirmation and count of cleared data
     """
     try:
+        # Simple admin check
+        if user_id.lower() != "admin":
+            raise HTTPException(
+                status_code=403, 
+                detail="Access denied. Only admin users can clear rate limiter data."
+            )
+        
         return RateLimiterController.clear_rate_limiter()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@api_router.get("/devices/connections")
+async def get_device_connections() -> Dict[str, Any]:
+    """
+    Get current WebSocket connection status for all devices.
+    
+    Returns:
+        Dict containing connection information for all devices including
+        connection status, last ping time, and response times
+    """
+    try:
+        return {
+            "connected_devices": websocket_manager.get_connected_devices(),
+            "total_connected": len(websocket_manager.device_connections),
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@api_router.get("/devices/{device_id}/connection")
+async def get_device_connection_status(device_id: str) -> Dict[str, Any]:
+    """
+    Get WebSocket connection status for a specific device.
+    
+    Args:
+        device_id: ID of the device to check
+        
+    Returns:
+        Dict containing connection status and timing information for the device
+    """
+    try:
+        is_connected = websocket_manager.is_device_connected(device_id)
+        connected_devices = websocket_manager.get_connected_devices()
+        device_info = connected_devices.get(device_id, {"connected": False})
+        
+        return {
+            "device_id": device_id,
+            "connected": is_connected,
+            "connection_info": device_info,
+            "timestamp": datetime.now().isoformat()
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")

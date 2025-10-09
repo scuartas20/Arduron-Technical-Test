@@ -114,6 +114,33 @@ app_state.add_access_log(access_event)
 
 ## WebSocket Communication Flows
 
+### Device Connection Health Monitoring
+
+#### Ping/Pong Heartbeat System
+The system implements an automated health monitoring system to detect disconnected devices:
+
+```
+Server Heartbeat Process:
+1. Every 10 seconds: Server sends ping to all connected devices
+2. Device responds with pong message within 30 seconds
+3. Server updates last_ping timestamp for device
+4. If no pong received within 30 seconds: Device marked as disconnected
+5. Connection status broadcast to all clients
+```
+
+#### Connection Status Lifecycle
+```
+Device Connection States:
+- ONLINE: Device connected and responding to pings
+- OFFLINE: Device disconnected or not responding
+- UNKNOWN: Initial state before first connection
+
+Timeout Configuration:
+- Ping Interval: 10 seconds
+- Response Timeout: 30 seconds (3x ping interval)
+- Detection Speed: Disconnection detected within 30-40 seconds
+```
+
 ### Frontend Dashboard Connection Flow
 
 #### 1. Client Connection (`/ws` endpoint)
@@ -152,10 +179,38 @@ Backend Flow:
 1. ESP32 connects to ws://localhost:5000/ws/DOOR-001
 2. websocket_manager.connect_device(websocket, "DOOR-001")
 3. Device stored in device_connections["DOOR-001"]
-4. Ready to receive commands and send status updates
+4. Device connection_status updated to ONLINE
+5. Heartbeat monitoring automatically begins
+6. Ready to receive commands and send status updates
 ```
 
-#### 2. Physical Button Request Flow
+#### 2. Heartbeat Monitoring Flow
+```
+Automated Health Check Process:
+1. Server sends ping every 10 seconds:
+   {
+     "type": "ping",
+     "timestamp": "2025-10-08T10:30:00Z"
+   }
+
+2. ESP32 responds with pong:
+   {
+     "type": "pong", 
+     "timestamp": "2025-10-08T10:30:00Z"
+   }
+
+3. Server updates device_last_ping[device_id]
+4. If no response within 30 seconds:
+   - Device marked as OFFLINE
+   - Removed from active connections
+   - Status change broadcast to all clients
+
+ESP32 Visual Indicators:
+- Brief LED flash on both LEDs when sending pong
+- Indicates active heartbeat communication
+```
+
+#### 3. Physical Button Request Flow
 ```
 ESP32 sends:
 {
@@ -175,7 +230,7 @@ Backend Processing:
 8. All clients notified via WebSocket broadcast
 ```
 
-#### 3. Device Status Update Flow
+#### 4. Device Status Update Flow
 ```
 ESP32 sends:
 {
@@ -196,6 +251,52 @@ Backend Processing:
 
 ## HTTP API Request Flows
 
+### Connection Status Request (`GET /api/devices/connections`)
+```
+Request: GET /api/devices/connections
+
+Flow:
+1. api_routes.get_device_connections() receives request
+2. websocket_manager.get_connected_devices() retrieves connection info
+3. Returns real-time WebSocket connection status for all devices
+4. Includes last ping times and response statistics
+
+Response:
+{
+  "connected_devices": {
+    "DOOR-001": {
+      "connected": true,
+      "last_ping": "2025-10-08T10:30:00Z",
+      "seconds_since_ping": 5.2
+    }
+  },
+  "total_connected": 1,
+  "timestamp": "2025-10-08T10:30:05Z"
+}
+```
+
+### Specific Device Connection (`GET /api/devices/{device_id}/connection`)
+```
+Request: GET /api/devices/DOOR-001/connection
+
+Flow:
+1. api_routes.get_device_connection_status() receives request
+2. websocket_manager.is_device_connected() checks WebSocket status
+3. Returns detailed connection information for specific device
+
+Response:
+{
+  "device_id": "DOOR-001",
+  "connected": true,
+  "connection_info": {
+    "connected": true,
+    "last_ping": "2025-10-08T10:30:00Z",
+    "seconds_since_ping": 5.2
+  },
+  "timestamp": "2025-10-08T10:30:05Z"
+}
+```
+
 ### Device Status Request (`GET /api/devices/status`)
 ```
 Request: GET /api/devices/status
@@ -215,7 +316,8 @@ Response:
       "location": "Main Entrance",
       "physical_status": "closed",
       "lock_state": "locked",
-      "device_type": "physical"
+      "device_type": "physical",
+      "connection_status": "online"
     }
   ],
   "timestamp": "2025-10-08T10:30:00Z",
@@ -561,6 +663,8 @@ HTTP response returned to caller
 - WebSocket broadcasts for all state changes
 - Immediate UI updates across all clients
 - Device commands sent in real-time
+- Automated health monitoring with 10-second ping/pong heartbeat
+- Connection status tracked and broadcast in real-time
 
 ### 4. Separation of Concerns
 - Models: Data structure and validation

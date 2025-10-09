@@ -162,6 +162,30 @@ void sendCommandResponse(String command, bool success, String message) {
   }
 }
 
+void sendPongResponse() {
+  if (webSocket.isConnected()) {
+    DynamicJsonDocument doc(512);
+    doc["type"] = "pong";
+    doc["timestamp"] = getTimestamp();
+    
+    String response;
+    serializeJson(doc, response);
+    
+    webSocket.sendTXT(response);
+    Serial.println("🏓 Pong sent to server");
+    
+    // Brief LED blink to indicate heartbeat activity
+    digitalWrite(LED_GREEN, HIGH);
+    digitalWrite(LED_RED, HIGH);
+    delay(50);
+    // Restore normal door state LEDs
+    setDoorState(doorOpen);
+    
+  } else {
+    Serial.println("⚠️ WebSocket not connected - Could not send pong");
+  }
+}
+
 String getTimestamp() {
   // Simple timestamp - in production you could use NTP
   return String(millis());
@@ -175,6 +199,14 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
       
     case WStype_CONNECTED:
       Serial.printf("🔌 WebSocket Connected to: %s\n", payload);
+      digitalWrite(LED_GREEN, HIGH);
+      digitalWrite(LED_RED, HIGH);
+      delay(50);
+      digitalWrite(LED_GREEN, HIGH);
+      digitalWrite(LED_RED, HIGH);
+      delay(50);
+      // Restore normal door state LEDs
+      setDoorState(doorOpen);
       // Send initial status
       sendStatusUpdate();
       break;
@@ -243,6 +275,10 @@ void handleWebSocketMessage(String message) {
   }
   else if (type == "ack") {
     Serial.println("✅ Acknowledgment received from server");
+  }
+  else if (type == "ping") {
+    // Respond to server ping with pong to maintain connection
+    sendPongResponse();
   }
   else {
     Serial.println("⚠️ Unknown message type: " + type);

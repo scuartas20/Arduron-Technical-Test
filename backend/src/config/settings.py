@@ -34,14 +34,27 @@ class Settings(BaseSettings):
     default_user_timeout: int = 300
     
     # Rate Limiting Configuration
-    rate_limit_max_attempts_per_minute: int = 20
-    rate_limit_max_failed_attempts: int = 5
+    rate_limit_max_attempts_per_minute: int = 10
+    rate_limit_max_failed_attempts: int = 10
     rate_limit_lockout_duration_minutes: int = 1
     rate_limit_cleanup_interval_minutes: int = 60
     
     # Device Configuration
     default_device_count: int = 2
     device_state_broadcast: bool = True
+    
+    # Door Configuration
+    door1_id: str = "DOOR-001"
+    door1_location: str = "Main Entrance"
+    door1_type: str = "virtual"  # "physical" or "virtual"
+    door1_initial_physical_status: str = "closed"  # "open" or "closed"
+    door1_initial_lock_state: str = "locked"  # "locked" or "unlocked"
+    
+    door2_id: str = "DOOR-002"
+    door2_location: str = "Conference Room A"
+    door2_type: str = "virtual"  # "physical" or "virtual"
+    door2_initial_physical_status: str = "closed"  # "open" or "closed"
+    door2_initial_lock_state: str = "unlocked"  # "locked" or "unlocked"
     
     # Logging Configuration
     log_level: str = "INFO"

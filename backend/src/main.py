@@ -103,6 +103,11 @@ async def device_websocket_endpoint(
                     # Handle response to commands sent from server
                     logger.info(f"Device {device_id} responded: {message}")
                     
+                elif message_type == "pong":
+                    # Handle pong response from device
+                    websocket_manager._update_device_ping(device_id)
+                    logger.debug(f"Received pong from device {device_id}")
+                    
                 else:
                     logger.warning(f"Unknown message type from device {device_id}: {message_type}")
                     
