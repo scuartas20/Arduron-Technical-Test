@@ -38,7 +38,7 @@ Beyond the core requirements, this project includes several advanced features:
 - **Connection status API endpoints** for monitoring device connectivity
 
 ### 2. **Advanced Rate Limiting & Security**
-- **Multi-layered rate limiting** (10 attempts/minute, 10 failed attempts lockout)
+- **Multi-layered rate limiting** (10 attempts/minute, 3 failed attempts lockout)
 - **Brute force protection** with automatic 1-minute lockouts
 - **Rate limiting statistics** and monitoring endpoints
 - **Admin-only rate limiter management** with user authentication
@@ -51,14 +51,7 @@ Beyond the core requirements, this project includes several advanced features:
 
 ### 4. **Comprehensive State Management**
 - **Physical vs Virtual device handling** with different behavior patterns
-- **Real-time WebSocket broadcasting** of all state changes
-- **Complete access event logging** with timestamps and user attribution
 
-### 5. **Production-Ready Architecture**
-- **Layered backend design** with clear separation of concerns
-- **Configurable settings** via environment variables
-- **Comprehensive API documentation** with OpenAPI/Swagger integration
-- **Docker deployment support** and cloud deployment instructions
 
 ## 🏗️ Architecture
 
@@ -68,13 +61,31 @@ Beyond the core requirements, this project includes several advanced features:
 │   Dashboard     │   (Bidirectional)│                 │   (Bidirectional)│ (Physical)      │
 └─────────────────┘                  └─────────────────┘                  └─────────────────┘
                                                ▲
-                                               │ HTTP Methods
+                                               │ HTTP/REST API
                                                │ (GET/POST/DELETE)
                                                ▼
                                      ┌─────────────────┐
-                                     │  REST API Client│
-                                     │ (External Tools)│
+                                     │  External Tools │
+                                     │ & API Clients   │
                                      └─────────────────┘
+```
+
+### System Flow
+```
+Frontend Dashboard ──► Display real-time status
+       ▲                      │
+       │                      ▼
+   WebSocket            HTTP Commands
+   Updates              POST /api/access_log
+       ▲                      │
+       │                      ▼
+Backend Services ──► Process & Validate ──► Update State
+       ▲                      │                    │
+       │                      ▼                    ▼
+   WebSocket            Send Commands        Log Events
+   Messages                   │                    │
+       ▲                      ▼                    ▼
+ESP32 Devices ◄─── Physical Buttons ──► Access Logs
 ```
 
 ### Backend Components
@@ -279,19 +290,6 @@ const int LED_GREEN = 17;  // Door open indicator
 const int SWITCH_PIN = 14; // Physical button input
 ```
 
-## 🧪 Testing
-
-### Backend Testing
-```bash
-cd backend
-python -m pytest
-```
-
-### ESP32 Button Testing
-```bash
-python test_esp32_button.py
-```
-
 ### API Testing
 
 #### Device Management
@@ -471,28 +469,37 @@ curl -X GET "http://localhost:5000/"
 
 ## 🚀 Deployment
 
-### Development
+### Local Development (Recommended for Getting Started)
 ```bash
-# Backend
-cd backend && python src/main.py
+# Backend - Option 1: Local Python
+cd backend
+pip install -r requirements.txt
+python src/main.py
 
 # Frontend  
-cd frontend && npm run dev
+cd frontend
+npm install
+npm run dev
+```
+
+### Docker Deployment
+
+#### Backend with Docker
+The backend includes a simple, optimized Dockerfile for easy containerization:
+
+```bash
+# Build the backend image
+cd backend
+docker build -t access-control-backend .
+
+# Run the backend container
+docker run -p 5000:5000 access-control-backend
+
+# Optional: Run with environment file
+docker run -p 5000:5000 --env-file .env access-control-backend
 ```
 
 ### Production Options
-
-#### Docker Deployment
-```yaml
-# docker-compose.yml
-services:
-  backend:
-    build: ./backend
-    ports: [\"5000:5000\"]
-  frontend:
-    build: ./frontend
-    ports: [\"3000:3000\"]
-```
 
 #### Cloud Deployment
 - **Frontend**: Vercel, Netlify
