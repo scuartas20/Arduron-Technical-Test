@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     
     # Rate Limiting Configuration
     rate_limit_max_attempts_per_minute: int = 10
-    rate_limit_max_failed_attempts: int = 10
+    rate_limit_max_failed_attempts: int = 3
     rate_limit_lockout_duration_minutes: int = 1
     rate_limit_cleanup_interval_minutes: int = 60
     
@@ -82,6 +82,9 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
+        # Additional pydantic model configuration
+        validate_assignment = True
+        use_enum_values = True
 
 
 # Global settings instance
