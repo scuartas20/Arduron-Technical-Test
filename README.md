@@ -70,24 +70,6 @@ Beyond the core requirements, this project includes several advanced features:
                                      └─────────────────┘
 ```
 
-### System Flow
-```
-Frontend Dashboard ──► Display real-time status
-       ▲                      │
-       │                      ▼
-   WebSocket            HTTP Commands
-   Updates              POST /api/access_log
-       ▲                      │
-       │                      ▼
-Backend Services ──► Process & Validate ──► Update State
-       ▲                      │                    │
-       │                      ▼                    ▼
-   WebSocket            Send Commands        Log Events
-   Messages                   │                    │
-       ▲                      ▼                    ▼
-ESP32 Devices ◄─── Physical Buttons ──► Access Logs
-```
-
 ### Backend Components
 - **FastAPI Application** - Entry point and server configuration
 - **State Manager** - Single source of truth for all system data
@@ -134,6 +116,7 @@ cd backend
 cp .env.example .env
 # Edit .env to customize door configurations
 
+# Create venv in backend and activate it for better practices
 pip install -r requirements.txt
 python src/main.py
 ```
@@ -482,7 +465,7 @@ npm install
 npm run dev
 ```
 
-### Docker Deployment
+### Next steps (In development): Docker Deployment
 
 #### Backend with Docker
 The backend includes a simple, optimized Dockerfile for easy containerization:
@@ -509,17 +492,7 @@ docker run -p 5000:5000 --env-file .env access-control-backend
 
 ## 📚 Documentation
 
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) - System architecture details
 - [`docs/CodeFlow.md`](docs/CodeFlow.md) - Code flow and data flow documentation
-- [`docs/CONNECTION_STATUS_IMPLEMENTATION.md`](docs/CONNECTION_STATUS_IMPLEMENTATION.md) - Connection monitoring implementation
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
 
 ## 📄 License
 
