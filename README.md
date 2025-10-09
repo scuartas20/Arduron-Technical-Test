@@ -1,6 +1,7 @@
 # Access Control Manager
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Node.js](https://img.shields.io/badge/node.js-16+-green.svg)](https://nodejs.org/)
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![React](https://img.shields.io/badge/react-18.2+-blue.svg)](https://reactjs.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-green.svg)](https://fastapi.tiangolo.com/)
@@ -484,11 +485,17 @@ docker run -p 5000:5000 --env-file .env access-control-backend
 
 ### Production Options
 
-#### Cloud Deployment
-- **Frontend**: Vercel, Netlify
-- **Backend**: AWS Lambda, Google Cloud Run, Azure Functions
-- **Database**: PostgreSQL, MongoDB (for persistence)
-- **Cache**: Redis (for session management)
+## 🚀 Deployment Plan
+
+The application will be deployed using a modern, scalable architecture with the following components:
+
+- **AWS EC2** – to host the backend service on a reliable and always-available virtual server.
+- **Docker** – to containerize the application, ensuring consistent environments and easy deployment.
+- **Nginx** – as a reverse proxy to route incoming traffic and support secure WebSocket connections.
+- **HTTPS (SSL/TLS)** – to provide encrypted and secure communication between clients and the server.
+- **Vercel / Netlify** – for hosting the frontend, allowing fast global delivery and simple integration with the backend API.
+
+This setup ensures scalability, security, and a clear separation between frontend and backend components, making future updates and maintenance more efficient.
 
 ## 📚 Documentation
 
